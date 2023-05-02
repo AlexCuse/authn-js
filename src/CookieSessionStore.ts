@@ -11,14 +11,14 @@ export default class CookieSessionStore implements SessionStore {
   private readonly secureFlag: string;
   private readonly path: string;
   private readonly sameSite: string;
-  private readonly ttl: number | undefined;
+  private readonly ttlSeconds: number | undefined;
 
   constructor(cookieName: string, opts: CookieSessionStoreOptions = {}) {
     this.sessionName = cookieName;
 
     this.path = !!opts.path ? `; path=${opts.path}` : "";
     this.sameSite = !!opts.sameSite ? `; SameSite=${opts.sameSite}` : "";
-    this.ttl = opts.ttl;
+    this.ttlSeconds = opts.ttl;
 
     if (typeof window !== "undefined") {
       this.secureFlag = window.location.protocol === "https:" ? "; secure" : "";
@@ -39,9 +39,9 @@ export default class CookieSessionStore implements SessionStore {
   update(val: string) {
     if (typeof document !== "undefined") {
       let expires = "";
-      if (!!this.ttl) {
+      if (!!this.ttlSeconds) {
         const exp = new Date();
-        exp.setTime(exp.getTime() + this.ttl);
+        exp.setTime(exp.getTime() + this.ttlSeconds);
         expires = `; expires=${exp.toUTCString()}`;
       }
       document.cookie = `${this.sessionName}=${val}${this.secureFlag}${expires}${this.path}${this.sameSite}`;
