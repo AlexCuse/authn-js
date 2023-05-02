@@ -3,7 +3,7 @@ import { SessionStore } from "./types";
 export interface CookieSessionStoreOptions {
   path?: string;
   sameSite?: "Lax" | "Strict" | "None";
-  ttl?: number | undefined;
+  ttlSeconds?: number | undefined;
 }
 
 export default class CookieSessionStore implements SessionStore {
@@ -18,7 +18,7 @@ export default class CookieSessionStore implements SessionStore {
 
     this.path = !!opts.path ? `; path=${opts.path}` : "";
     this.sameSite = !!opts.sameSite ? `; SameSite=${opts.sameSite}` : "";
-    this.ttlSeconds = opts.ttl;
+    this.ttlSeconds = opts.ttlSeconds;
 
     if (typeof window !== "undefined") {
       this.secureFlag = window.location.protocol === "https:" ? "; secure" : "";
