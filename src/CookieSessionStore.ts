@@ -3,7 +3,6 @@ import { SessionStore } from "./types";
 export interface CookieSessionStoreOptions {
   path?: string;
   sameSite?: "Lax" | "Strict" | "None";
-  ttlSeconds?: number | undefined;
 }
 
 export default class CookieSessionStore implements SessionStore {
@@ -11,14 +10,12 @@ export default class CookieSessionStore implements SessionStore {
   private readonly secureFlag: string;
   private readonly path: string;
   private readonly sameSite: string;
-  private readonly ttlSeconds: number | undefined;
 
   constructor(cookieName: string, opts: CookieSessionStoreOptions = {}) {
     this.sessionName = cookieName;
 
     this.path = !!opts.path ? `; path=${opts.path}` : "";
     this.sameSite = !!opts.sameSite ? `; SameSite=${opts.sameSite}` : "";
-    this.ttlSeconds = opts.ttlSeconds;
 
     if (typeof window !== "undefined") {
       this.secureFlag = window.location.protocol === "https:" ? "; secure" : "";
@@ -36,13 +33,13 @@ export default class CookieSessionStore implements SessionStore {
     }
   }
 
-  update(val: string) {
+  update(val: string, exp: number | undefined) {
     if (typeof document !== "undefined") {
       let expires = "";
-      if (!!this.ttlSeconds) {
-        const exp = new Date();
-        exp.setTime(exp.getTime() + this.ttlSeconds * 1000);
-        expires = `; expires=${exp.toUTCString()}`;
+      if (!!exp) {
+        const expiresDate = new Date();
+        expiresDate.setTime(exp);
+        expires = `; expires=${expiresDate.toUTCString()}`;
       }
       document.cookie = `${this.sessionName}=${val}${this.secureFlag}${expires}${this.path}${this.sameSite}`;
     }
