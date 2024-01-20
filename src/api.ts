@@ -106,7 +106,8 @@ export function sessionTokenLogin(credentials: {
 }
 
 export function newTOTP(): Promise<OtpData> {
-  return post<OtpData>(url("/totp/new"), {}).then((result: OtpData) => result);
+  return post<OtpData>(url("/totp/new"), {})
+      .then((result: OtpData) => result); //catch??
 }
 
 export function confirmTOTP(req: { otp: string }): Promise<boolean> {

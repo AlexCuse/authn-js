@@ -1,4 +1,4 @@
-import { rest } from "msw";
+import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import * as AuthN from "./index";
 
@@ -10,7 +10,7 @@ afterAll(() => server.close());
 AuthN.setHost("https://authn.example.com");
 AuthN.setCookieStore("authn");
 
-function jwt(payload: Record<string, string | number>): string {
+const jwt = (payload: Record<string, string | number>): string => {
   var metadata = {};
   var signature = "BEEF";
   return (
@@ -22,7 +22,7 @@ function jwt(payload: Record<string, string | number>): string {
   );
 }
 
-function idToken(options: { age: number }): string {
+const idToken = (options: { age: number }): string => {
   var age = options.age || 600;
   var iat = Math.floor(Date.now() / 1000) - age;
   return jwt({
@@ -33,38 +33,38 @@ function idToken(options: { age: number }): string {
 }
 
 const errorsObj = (data: Record<string, string>) =>
-  Object.keys(data).map(function (k) {
+  Object.keys(data).map((k) => {
     return { field: k, message: data[k] };
   });
 
-type RestResolver = ReturnType<typeof rest.post>["resolver"];
+type RestResolver = ReturnType<typeof http.post>["resolver"];
 const jsonResolver =
   (data: Record<string, any>): RestResolver =>
-  (_, res, ctx) =>
-    res(ctx.json(data));
+      ({request}) => HttpResponse.json(data);
+
 const resultResolver = (data: any) => jsonResolver({ result: data });
 const errorsResolver = (data: Record<string, string>) =>
   jsonResolver({ errors: errorsObj(data) });
 
-function readCookie(name: string): string {
+const readCookie = (name: string): string => {
   return document.cookie.replace(
     new RegExp("(?:(?:^|.*;\\s*)" + name + "\\s*\\=\\s*([^;]*).*$)|^.*$"),
     "$1"
   );
 }
 
-function writeCookie(name: string, val: string): void {
+const writeCookie = (name: string, val: string): void => {
   document.cookie = name + "=" + val + ";";
 }
 
-function deleteCookie(name: string): void {
+const deleteCookie = (name: string): void => {
   document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
 }
 
 describe("signup", () => {
   test("success", async () => {
     server.use(
-      rest.post(
+      http.post(
         "https://authn.example.com/accounts",
         resultResolver({ id_token: idToken({ age: 1 }) })
       )
@@ -79,7 +79,7 @@ describe("signup", () => {
 
   test("failure", async () => {
     server.use(
-      rest.post(
+      http.post(
         "https://authn.example.com/accounts",
         errorsResolver({ foo: "bar" })
       )
@@ -92,7 +92,7 @@ describe("signup", () => {
 
   test("double submit", async () => {
     server.use(
-      rest.post(
+      http.post(
         "https://authn.example.com/accounts",
         resultResolver({ id_token: idToken({ age: 1 }) })
       )
@@ -110,11 +110,12 @@ describe("signup", () => {
 describe("isAvailable", () => {
   test("name is not taken", async () => {
     server.use(
-      rest.get(
+      http.get(
         "https://authn.example.com/accounts/available",
-        (req, res, ctx) => {
-          expect(req.url.searchParams.get("username")).toBe("test");
-          return res(ctx.json({ result: true }));
+        ({request}) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get("username")).toBe("test");
+          return HttpResponse.json({result: true});
         }
       )
     );
@@ -124,13 +125,12 @@ describe("isAvailable", () => {
 
   test("name is taken", async () => {
     server.use(
-      rest.get(
+      http.get(
         "https://authn.example.com/accounts/available",
-        (req, res, ctx) => {
-          expect(req.url.searchParams.get("username")).toBe("test");
-          return res(
-            ctx.json({ errors: [{ field: "username", message: "TAKEN" }] })
-          );
+        ({request}) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get("username")).toBe("test");
+          return HttpResponse.json({ errors: [{ field: "username", message: "TAKEN" }] });
         }
       )
     );
@@ -160,7 +160,7 @@ describe("restoreSession", () => {
 
     writeCookie("authn", oldSession);
     server.use(
-      rest.get(
+      http.get(
         "https://authn.example.com/session/refresh",
         resultResolver({ id_token: newSession })
       )
@@ -173,8 +173,8 @@ describe("restoreSession", () => {
   test("aging and revoked session", async () => {
     writeCookie("authn", idToken({ age: 3000 }));
     server.use(
-      rest.get("https://authn.example.com/session/refresh", (_, res, ctx) =>
-        res(ctx.status(401, ""))
+      http.get("https://authn.example.com/session/refresh", () =>
+        new HttpResponse(null, {status: 401})
       )
     );
 
@@ -188,7 +188,7 @@ describe("restoreSession", () => {
 
     writeCookie("authn", oldSession);
     server.use(
-      rest.get(
+      http.get(
         "https://authn.example.com/session/refresh",
         resultResolver({ id_token: newSession })
       )
@@ -201,8 +201,8 @@ describe("restoreSession", () => {
   test("expired and revoked session", async () => {
     writeCookie("authn", idToken({ age: 9999 }));
     server.use(
-      rest.get("https://authn.example.com/session/refresh", (_, res, ctx) =>
-        res(ctx.status(401, ""))
+      http.get("https://authn.example.com/session/refresh", () =>
+        new HttpResponse(null, {status: 401})
       )
     );
 
@@ -225,7 +225,7 @@ describe("importSession", () => {
     var newSession = idToken({ age: 1 });
 
     server.use(
-      rest.get(
+      http.get(
         "https://authn.example.com/session/refresh",
         resultResolver({ id_token: newSession })
       )
@@ -239,7 +239,7 @@ describe("importSession", () => {
 describe("login", () => {
   test("success", async () => {
     server.use(
-      rest.post(
+      http.post(
         "https://authn.example.com/session",
         resultResolver({ id_token: idToken({ age: 1 }) })
       )
@@ -253,9 +253,25 @@ describe("login", () => {
     expect(readCookie("authn")).toEqual(token);
   });
 
+  test("success OTP", async () => {
+    server.use(
+      http.post(
+        "https://authn.example.com/session",
+        resultResolver({ id_token: idToken({ age: 1 }) })
+      )
+    );
+
+    await AuthN.login({ username: "test", password: "test", otp: "555667" });
+
+    const token = AuthN.session();
+    expect(token!.length).toBeGreaterThan(0);
+    expect(token!.split(".")).toHaveLength(3);
+    expect(readCookie("authn")).toEqual(token);
+  });
+
   test("failure", async () => {
     server.use(
-      rest.post(
+      http.post(
         "https://authn.example.com/session",
         errorsResolver({ foo: "bar" })
       )
@@ -270,9 +286,10 @@ describe("login", () => {
 describe("requestPasswordReset", () => {
   test("success or failure", async () => {
     server.use(
-      rest.get("https://authn.example.com/password/reset", (req, res, ctx) => {
-        expect(req.url.searchParams.get("username")).toBe("test");
-        return res(ctx.text(""));
+      http.get("https://authn.example.com/password/reset", ({request}) => {
+        const url = new URL(request.url);
+        expect(url.searchParams.get("username")).toBe("test");
+        return HttpResponse.text("");
       })
     );
 
@@ -283,7 +300,7 @@ describe("requestPasswordReset", () => {
 describe("changePassword", () => {
   test("success", async () => {
     server.use(
-      rest.post(
+      http.post(
         "https://authn.example.com/password",
         resultResolver({ id_token: idToken({ age: 1 }) })
       )
@@ -302,9 +319,9 @@ describe("changePassword", () => {
 
   test("failure", async () => {
     server.use(
-      rest.post(
+      http.post(
         "https://authn.example.com/password",
-        errorsResolver({ foo: "bar" })
+          errorsResolver({ foo: "bar" })
       )
     );
 
@@ -320,7 +337,7 @@ describe("changePassword", () => {
 describe("resetPassword", () => {
   test("success", async () => {
     server.use(
-      rest.post(
+      http.post(
         "https://authn.example.com/password",
         resultResolver({ id_token: idToken({ age: 1 }) })
       )
@@ -339,7 +356,7 @@ describe("resetPassword", () => {
 
   test("failure", async () => {
     server.use(
-      rest.post(
+      http.post(
         "https://authn.example.com/password",
         errorsResolver({ foo: "bar" })
       )
@@ -358,8 +375,8 @@ describe("logout", () => {
   test("success", async () => {
     writeCookie("authn", idToken({ age: 1 }));
     server.use(
-      rest.delete("https://authn.example.com/session", (_, res, ctx) =>
-        res(ctx.text(""))
+      http.delete("https://authn.example.com/session", () =>
+        HttpResponse.text("")
       )
     );
 
@@ -374,9 +391,10 @@ describe("logout", () => {
 describe("requestSessionToken", () => {
   test("success or failure", async () => {
     server.use(
-      rest.get("https://authn.example.com/session/token", (req, res, ctx) => {
-        expect(req.url.searchParams.get("username")).toBe("test");
-        return res(ctx.text(""));
+      http.get("https://authn.example.com/session/token", ({request}) => {
+        const url = new URL(request.url);
+        expect(url.searchParams.get("username")).toBe("test");
+        return HttpResponse.text("");
       })
     );
 
@@ -387,13 +405,13 @@ describe("requestSessionToken", () => {
 describe("sessionTokenLogin", () => {
   test("success", async () => {
     server.use(
-      rest.post(
-        "https://authn.example.com/session/token",
-        resultResolver({ id_token: idToken({ age: 1 }) })
-      )
+        http.post(
+            "https://authn.example.com/session/token",
+            resultResolver({id_token: idToken({age: 1})})
+        )
     );
 
-    await AuthN.sessionTokenLogin({ token: "test" });
+    await AuthN.sessionTokenLogin({token: "test"});
 
     const token = AuthN.session();
     expect(token!.length).toBeGreaterThan(0);
@@ -403,16 +421,106 @@ describe("sessionTokenLogin", () => {
 
   test("failure", async () => {
     server.use(
-      rest.post(
-        "https://authn.example.com/session/token",
-        errorsResolver({ foo: "bar" })
-      )
+        http.post(
+            "https://authn.example.com/session/token",
+            errorsResolver({foo: "bar"})
+        )
     );
 
     await expect(
-      AuthN.sessionTokenLogin({
-        token: jwt({ foo: "bar" }),
-      })
-    ).rejects.toEqual([{ field: "foo", message: "bar" }]);
+        AuthN.sessionTokenLogin({
+          token: jwt({foo: "bar"}),
+        })
+    ).rejects.toEqual([{field: "foo", message: "bar"}]);
+  });
+});
+
+describe("totp", () => {
+  describe("newTOTP", () => {
+    test("success", async () => {
+      server.use(
+          http.post(
+              "https://authn.example.com/totp/new",
+              resultResolver({ otp: "55567", secret: "xxx"})
+          )
+      );
+
+      const res = await AuthN.newTOTP();
+
+      expect(res).toBe({ otp: "55567", secret: "xxx"});
+    });
+
+    test("failure", async () => {
+      server.use(
+          http.post(
+              "https://authn.example.com/totp/new",
+              errorsResolver({ foo: "bar" })
+          )
+      );
+
+      await expect(
+          AuthN.deleteTOTP()
+      ).rejects.toEqual([{ field: "foo", message: "bar" }]);
+    });
+  });
+
+  describe("confirmTOTP", () => {
+    test("success", async () => {
+      server.use(
+          http.post(
+              "https://authn.example.com/totp/confirm",
+              resultResolver(undefined)
+          )
+      );
+
+      const res = await AuthN.confirmTOTP({
+        otp: "555667"
+      });
+
+      expect(res).toBe(true);
+    });
+
+    test("failure", async () => {
+      server.use(
+          http.post(
+              "https://authn.example.com/totp/confirm",
+              errorsResolver({ foo: "bar" })
+          )
+      );
+
+      await expect(
+          AuthN.confirmTOTP({
+            otp: "555667"
+          })
+      ).rejects.toEqual([{ field: "foo", message: "bar" }]);
+    });
+  });
+
+  describe("deleteTOTP", () => {
+    test("success", async () => {
+      server.use(
+          http.delete(
+              "https://authn.example.com/totp",
+              resultResolver(undefined)
+          )
+      );
+
+      const res = await AuthN.deleteTOTP();
+
+      expect(res).toBe(true);
+    });
+
+    test("failure", async () => {
+      server.use(
+          http.delete(
+              "https://authn.example.com/totp",
+              errorsResolver({ foo: "bar" })
+          )
+      );
+
+      await expect(
+          AuthN.deleteTOTP()
+      ).rejects.toEqual([{ field: "foo", message: "bar" }]);
+    });
   });
 });
